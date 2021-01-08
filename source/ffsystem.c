@@ -5,7 +5,10 @@
 
 
 #include "ff.h"
-
+#ifdef __LITEOS_M__
+#include "ffconf.h"
+#include "los_memory.h"
+#endif
 
 void ff_memset (void* dst,
 	int val,
@@ -19,7 +22,7 @@ void ff_memset (void* dst,
 	} while (--cnt);
 }
 
-
+#ifndef __LITEOS_M__
 int ff_strnlen(const void *str,
 	size_t maxlen
 )
@@ -30,6 +33,7 @@ int ff_strnlen(const void *str,
 
 	return p - c;
 }
+#endif
 
 /*------------------------------------------------------------------------*/
 /* Allocate a memory block                                                */
@@ -87,6 +91,7 @@ int ff_cre_syncobj (	/* 1:Function succeeded, 0:Could not create the sync object
 	FF_SYNC_t* sobj		/* Pointer to return the created sync object */
 )
 {
+#ifndef __LITEOS_M__
 	int ret;
 
 
@@ -95,6 +100,9 @@ int ff_cre_syncobj (	/* 1:Function succeeded, 0:Could not create the sync object
 		return TRUE;
 	} else
 		return FALSE;
+#else
+	return TRUE;
+#endif
 }
 
 
@@ -110,6 +118,7 @@ int ff_del_syncobj (	/* 1:Function succeeded, 0:Could not delete due to an error
 	FF_SYNC_t* sobj		/* Sync object tied to the logical drive to be deleted */
 )
 {
+#ifndef __LITEOS_M__
 	int ret;
 	ret = LOS_MuxDestroy(sobj);
 	if(ret == LOS_OK) {
@@ -117,6 +126,9 @@ int ff_del_syncobj (	/* 1:Function succeeded, 0:Could not delete due to an error
 	} else {
 		return FALSE;
 	}
+#else
+	return TRUE;
+#endif
 }
 
 
@@ -131,11 +143,15 @@ int ff_req_grant (	/* 1:Got a grant to access the volume, 0:Could not get a gran
 	FF_SYNC_t* sobj	/* Sync object to wait */
 )
 {
+#ifndef __LITEOS_M__
 	if (LOS_MuxLock(sobj, FF_FS_TIMEOUT) == LOS_OK) {
 		return TRUE;
 	}
 
 	return FALSE;
+#else
+	return TRUE;
+#endif
 }
 
 
@@ -149,7 +165,9 @@ void ff_rel_grant (
 	FF_SYNC_t* sobj	/* Sync object to be signaled */
 )
 {
+#ifndef __LITEOS_M__
 	(void)LOS_MuxUnlock(sobj);
+#endif
 }
 
 #endif
