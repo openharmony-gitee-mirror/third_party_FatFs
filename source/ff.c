@@ -21,9 +21,6 @@
 #include "ff.h"			/* Declarations of FatFs API */
 #ifndef __LITEOS_M__
 #include <user_copy.h>
-#else
-#include "os_feature.h"
-#include "cmsis_os.h"
 #endif
 #include "diskio.h"		/* Declarations of device I/O functions */
 
@@ -2114,6 +2111,7 @@ static void get_fileinfo (
 )
 {
 	UINT si, di;
+	UINT pointposition = 0;
 #if FF_USE_LFN
 	WCHAR wc, hs;
 	FATFS *fs = dp->obj.fs;
@@ -2147,7 +2145,10 @@ static void get_fileinfo (
 		wc = dp->dir[si++];			/* Get a char */
 		if (wc == ' ') continue;	/* Skip padding spaces */
 		if (wc == RDDEM) wc = DDEM;	/* Restore replaced DDEM character */
-		if (si == 9 && di < FF_SFN_BUF) fno->altname[di++] = '.';	/* Insert a . if extension is exist */
+		if (si == 9 && di < FF_SFN_BUF) {
+			pointposition = di;
+			fno->altname[di++] = '.'; /* Insert a . if extension is exist */
+		}
 #if FF_LFN_UNICODE >= 1	/* Unicode output */
 		if (dbc_1st((BYTE)wc) && si != 8 && si != 11 && dbc_2nd(dp->dir[si])) {	/* Make a DBC if needed */
 			wc = wc << 8 | dp->dir[si++];
@@ -2167,9 +2168,12 @@ static void get_fileinfo (
 		if (di == 0) {	/* If LFN and SFN both are invalid, this object is inaccesible */
 			fno->fname[di++] = '?';
 		} else {
+			pointposition = (pointposition != 0) ? pointposition : 9;
 			for (si = di = 0; fno->altname[si]; si++, di++) {	/* Copy altname[] to fname[] with case information */
 				wc = (WCHAR)fno->altname[si];
-				if (IsUpper(wc) && (dp->dir[DIR_NTres] & ((si >= 9) ? NS_EXT : NS_BODY))) wc += 0x20;
+				if (IsUpper(wc) && (dp->dir[DIR_NTres] & ((si >= pointposition) ? NS_EXT : NS_BODY))) {
+					wc += 0x20;
+				}
 				fno->fname[di] = (TCHAR)wc;
 			}
 		}
@@ -4996,7 +5000,7 @@ FRESULT f_expand (
 	if (fp->obj.sclust != 0) {
 	    count = get_clustinfo(fp, &fclust);
 	}
-	if (offset + fsz <= n * count) LEAVE_FF(fs, FR_DENIED);
+	if (offset + fsz <= n * count) LEAVE_FF(fs, FR_OK);
 
 	exsz = offset + fsz - n * count;
 	tcl = (DWORD)(exsz / n) + ((exsz & (n - 1)) ? 1 : 0);	/* Number of clusters required */

@@ -8,6 +8,14 @@
 #ifdef __LITEOS_M__
 #include "ffconf.h"
 #include "los_memory.h"
+#include "los_membox.h"
+#endif
+
+#ifdef __LITEOS_M__
+#define FF_MEM_BLOCK_NUM     (FAT_MAX_OPEN_FILES + FF_VOLUMES)
+#define FF_MEMBOX_HEAD_SIZE  (sizeof(LOS_MEMBOX_INFO) + OS_MEMBOX_NODE_HEAD_SIZE * FF_MEM_BLOCK_NUM)
+#define FF_MEMBOX_ALLOC_SIZE (FF_MAX_SS * FF_MEM_BLOCK_NUM + FF_MEMBOX_HEAD_SIZE)
+static unsigned char g_ffMemBoxArray[FF_MEMBOX_ALLOC_SIZE] = {0};
 #endif
 
 void ff_memset (void* dst,
@@ -47,8 +55,16 @@ void* ff_memalloc (	/* Returns pointer to the allocated memory block (null if no
 
 	if(msize == 0)
 		return NULL;
-
+#ifndef __LITEOS_M__
 	ptr = LOS_MemAlloc((void *)OS_SYS_MEM_ADDR,  msize);	/* Allocate a new memory block*/
+#else
+	static int initFlag = 0;
+	if (initFlag == 0) {
+		(VOID)LOS_MemboxInit(g_ffMemBoxArray, FF_MEMBOX_ALLOC_SIZE, FF_MAX_SS);
+		initFlag = 1;
+	}
+	ptr = LOS_MemboxAlloc(g_ffMemBoxArray);
+#endif
 	if (ptr != NULL) {
 		ff_memset((void *)ptr, (int)0, msize);
 	}
@@ -67,8 +83,11 @@ void ff_memfree (
 {
 	if (mblock == NULL)
 		return;
-
+#ifndef __LITEOS_M__
 	(VOID)LOS_MemFree((void *)OS_SYS_MEM_ADDR, mblock);
+#else
+	(VOID)LOS_MemboxFree(g_ffMemBoxArray, mblock);
+#endif
 }
 
 

@@ -313,7 +313,7 @@ enum STORAGE {
 #ifndef __LITEOS_M__
 #define FF_FS_LOCK	CONFIG_NFILE_DESCRIPTORS
 #else
-#define FF_FS_LOCK	FAT_MAX_OPEN_FILES
+#define FF_FS_LOCK	64
 #endif
 /* The option FF_FS_LOCK switches file lock function to control duplicated file open
 /  and illegal operation to open objects. This option must be 0 when FF_FS_READONLY
@@ -328,7 +328,7 @@ enum STORAGE {
 
 #ifndef __LITEOS_M__
 #define FF_FS_REENTRANT	1
-#define FF_FS_TIMEOUT	6000
+#define FF_FS_TIMEOUT	(60 * LOSCFG_BASE_CORE_TICK_PER_SECOND)
 #define FF_SYNC_t		LosMux
 #else
 #define FF_FS_REENTRANT	0
