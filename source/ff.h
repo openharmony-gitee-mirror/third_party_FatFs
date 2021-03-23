@@ -29,10 +29,65 @@ extern "C" {
 #ifdef LOSCFG_FS_FAT_VIRTUAL_PARTITION
 #include "fs/fs.h"
 #endif
+#ifndef __LITEOS_M__
+#include "los_list.h"
+#endif
 #if FF_DEFINED != FFCONF_DEF
 #error Wrong configuration file (ffconf.h).
 #endif
 #include "dirent.h"
+
+/*--------------------------------*/
+/* LFN/Directory working buffer   */
+/*--------------------------------*/
+
+#if FF_USE_LFN == 0		/* Non-LFN configuration */
+#define DEF_NAMBUF
+#define INIT_NAMBUF(fs)
+#define FREE_NAMBUF()
+#define LEAVE_MKFS(res)	return res
+
+#else					/* LFN configurations */
+#if FF_MAX_LFN < 12 || FF_MAX_LFN > 255
+#error Wrong setting of FF_MAX_LFN
+#endif
+#if FF_LFN_BUF < FF_SFN_BUF || FF_SFN_BUF < 12
+#error Wrong setting of FF_LFN_BUF or FF_SFN_BUF
+#endif
+#if FF_LFN_UNICODE < 0 || FF_LFN_UNICODE > 3
+#error Wrong setting of FF_LFN_UNICODE
+#endif
+static const BYTE LfnOfs[] = {1,3,5,7,9,14,16,18,20,22,24,28,30};	/* FAT: Offset of LFN characters in the directory entry */
+
+#if FF_USE_LFN == 1		/* LFN enabled with static working buffer */
+static WCHAR LfnBuf[FF_MAX_LFN + 1];		/* LFN working buffer */
+#define DEF_NAMBUF
+#define INIT_NAMBUF(fs)
+#define FREE_NAMBUF()
+#define LEAVE_MKFS(res)	return res
+
+#elif FF_USE_LFN == 2 	/* LFN enabled with dynamic working buffer on the stack */
+#define DEF_NAMBUF		WCHAR lbuf[FF_MAX_LFN+1];	/* LFN working buffer */
+#define INIT_NAMBUF(fs)	{ (fs)->lfnbuf = lbuf; }
+#define FREE_NAMBUF()
+#define LEAVE_MKFS(res)	return res
+
+#elif FF_USE_LFN == 3 	/* LFN enabled with dynamic working buffer on the heap */
+#define DEF_NAMBUF		WCHAR *lfn;	/* Pointer to LFN working buffer and directory entry block scratchpad buffer */
+#define INIT_NAMBUF(fs)	{ lfn = ff_memalloc((FF_MAX_LFN+1)*2); if (!lfn) LEAVE_FF(fs, FR_NOT_ENOUGH_CORE); (fs)->lfnbuf = lfn; }
+#define FREE_NAMBUF()	ff_memfree(lfn)
+#define LEAVE_MKFS(res)	{ if (!work) ff_memfree(buf); return res; }
+#define MAX_MALLOC	0x8000	/* Must be >=FF_MAX_SS */
+
+#else
+#error Wrong setting of FF_USE_LFN
+
+#endif	/* FF_USE_LFN == 1 */
+#endif	/* FF_USE_LFN == 0 */
+
+
+#define NS_NONAME	0x80	/* Not followed */
+#define NSFLAG		11		/* Index of the name status byte */
 
 /* Definitions of volume management */
 
@@ -116,7 +171,42 @@ typedef char TCHAR;
 /* Type of file size variables */
 typedef DWORD FSIZE_t;
 
+/* DIR offset in fs win */
+#define DIR_Name			0		/* Short file name (11-byte) */
+#define DIR_Attr			11		/* Attribute (BYTE) */
+#define DIR_NTres			12		/* Lower case flag (BYTE) */
+#define DIR_CrtTime10		13		/* Created time sub-second (BYTE) */
+#define DIR_CrtTime			14		/* Created time (DWORD) */
+#define DIR_LstAccDate		18		/* Last accessed date (WORD) */
+#define DIR_FstClusHI		20		/* Higher 16-bit of first cluster (WORD) */
+#define DIR_ModTime			22		/* Modified time (DWORD) */
+#define DIR_FstClusLO		26		/* Lower 16-bit of first cluster (WORD) */
+#define DIR_FileSize		28		/* File size (DWORD) */
+#define LDIR_Ord			0		/* LFN: LFN order and LLE flag (BYTE) */
+#define LDIR_Attr			11		/* LFN: LFN attribute (BYTE) */
+#define LDIR_Type			12		/* LFN: Entry type (BYTE) */
+#define LDIR_Chksum			13		/* LFN: Checksum of the SFN (BYTE) */
+#define LDIR_FstClusLO		26		/* LFN: MBZ field (WORD) */
 
+
+/* Limits and boundaries */
+#define MAX_DIR		0x200000		/* Max size of FAT directory */
+#define MAX_FAT12	0xFF5			/* Max FAT12 clusters (differs from specs, but right for real DOS/Windows behavior) */
+#define MAX_FAT16	0xFFF5			/* Max FAT16 clusters (differs from specs, but right for real DOS/Windows behavior) */
+#define MAX_FAT32	0x0FFFFFF5		/* Max FAT32 clusters (not specified, practical limit) */
+
+
+/* Timestamp */
+#if FF_FS_NORTC == 1
+#if FF_NORTC_YEAR < 1980 || FF_NORTC_YEAR > 2107 || FF_NORTC_MON < 1 || FF_NORTC_MON > 12 || FF_NORTC_MDAY < 1 || FF_NORTC_MDAY > 31
+#error Invalid FF_FS_NORTC settings
+#endif
+#define GET_FATTIME()	((DWORD)(FF_NORTC_YEAR - 1980) << 25 | (DWORD)FF_NORTC_MON << 21 | (DWORD)FF_NORTC_MDAY << 16)
+#else
+#define GET_FATTIME()	get_fattime()
+#endif
+
+extern UINT	time_status;
 
 /* Filesystem object structure (FATFS) */
 
@@ -165,8 +255,9 @@ typedef struct {
 	VOID**	child_fs;		/* Point to the child Fatfs object ,only available in reality Fatfs object */
 #endif
 #ifndef __LITEOS_M__
-	uid_t fs_uid;
-	gid_t fs_gid;
+	int fs_uid;
+	int fs_gid;
+	mode_t fs_mode;
 #endif
 	unsigned short fs_dmask;
 	unsigned short fs_fmask;
@@ -209,6 +300,9 @@ typedef struct {
 #if !FF_FS_TINY
 	BYTE*	buf;			/* File private data read/write window */
 #endif
+#ifndef __LITEOS_M__
+	LOS_DL_LIST fp_entry;
+#endif
 } FIL;
 
 
@@ -247,6 +341,9 @@ typedef struct {
 	TCHAR	fname[12 + 1];	/* File name */
 #endif
 	DWORD	sclst;
+#ifndef __LITEOS_M__
+	LOS_DL_LIST fp_list;
+#endif
 } FILINFO;
 
 typedef struct {
@@ -341,6 +438,7 @@ FRESULT f_expand (FIL* fp, FSIZE_t offset, FSIZE_t fsz, int opt);	/* Allocate a 
 FRESULT f_mount (FATFS* fs, const TCHAR* path, BYTE opt);			/* Mount/Unmount a logical drive */
 FRESULT f_mkfs (const TCHAR* path, BYTE opt, int sector, void* work, UINT len);	/* Create a FAT volume */
 FRESULT f_fdisk (BYTE pdrv, const DWORD* szt, void* work);			/* Divide a physical drive into some partitions */
+
 int f_putc (TCHAR c, FIL* fp);										/* Put a character to the file */
 int f_puts (const TCHAR* str, FIL* cp);								/* Put a string to the file */
 int f_printf (FIL* fp, const TCHAR* str, ...);						/* Put a formatted string to the file */
@@ -350,15 +448,35 @@ void f_settimestatus (UINT status);									/* system time flag setting */
 FRESULT f_fcheckfat (DIR_FILE* dir_info);							/* check file cluster list */
 FRESULT f_getclustinfo (FIL* fp, DWORD* fclust, DWORD* fcount);	/* get the clusters information of the file */
 FRESULT f_checkopenlock(int index);
+FRESULT sync_fs (FATFS* fs);
+FRESULT sync_window(FATFS *fs);
+FRESULT move_window ( FATFS* fs, QWORD	sector);
+void get_fileinfo (DIR* dp, FILINFO* fno);
 DWORD get_fat (FFOBJID *obj, DWORD clst);
+FRESULT put_fat(FATFS *fs, DWORD clst, DWORD val);
 FRESULT find_volume (const TCHAR **path, FATFS **rfs, BYTE mode);
+QWORD clst2sect (FATFS* fs, DWORD clst );
+DWORD ld_clust(FATFS *fs, const BYTE *dir);
+void st_clust(FATFS *fs, BYTE *dir, DWORD cl);
 DWORD ld_dword (const BYTE *ptr);
 WORD ld_word (const BYTE *ptr);
-void st_word (BYTE *ptr, WORD val);
 void st_dword (BYTE *ptr, DWORD val);
+void st_word (BYTE *ptr, WORD val);
 FRESULT create_name (DIR *dp, const TCHAR **path);
 int lock_fs (FATFS *fs);
+BYTE check_fs(FATFS *fs, QWORD sect);
+UINT inc_lock(DIR* dp, int acc);
 void unlock_fs (FATFS *fs, FRESULT res);
+FRESULT dir_sdi (DIR *dp, DWORD ofs);
+FRESULT dir_find(DIR *dp);
+FRESULT dir_read(DIR *dp, int vol);
+FRESULT dir_remove(DIR *dp);
+FRESULT dir_next(DIR *dp, int stretch);
+FRESULT dir_register(DIR *dp);
+DWORD create_chain (FFOBJID* obj, DWORD clst);
+FRESULT remove_chain (FFOBJID* obj, DWORD clst, DWORD pclst);
+void mem_set (void* dst, int val, UINT cnt);
+void mem_cpy (void* dst, const void* src, UINT cnt);
 int fatfs_get_vol (FATFS *fat);
 
 #define f_eof(fp) ((int)((fp)->fptr == (fp)->obj.objsize))

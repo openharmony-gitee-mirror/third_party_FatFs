@@ -328,7 +328,7 @@ enum STORAGE {
 
 #ifndef __LITEOS_M__
 #define FF_FS_REENTRANT	1
-#define FF_FS_TIMEOUT	(60 * LOSCFG_BASE_CORE_TICK_PER_SECOND)
+#define FF_FS_TIMEOUT	LOS_WAIT_FOREVER
 #define FF_SYNC_t		LosMux
 #else
 #define FF_FS_REENTRANT	0
