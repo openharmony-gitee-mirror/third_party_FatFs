@@ -923,8 +923,34 @@ FRESULT move_window (	/* Returns FR_OK or FR_DISK_ERR */
 	return res;
 }
 
+#ifndef __LITEOS_M__
+FRESULT move_window_readdir (	/* Returns FR_OK or FR_DISK_ERR */
+	FATFS* fs,		    /* File system object */
+	QWORD	sector		/* Sector number to make appearance in the fs->win[] */
+)
+{
+	FRESULT res = FR_OK;
 
+#ifdef LOSCFG_FS_FAT_VIRTUAL_PARTITION
+	/* Forced the fs point to its parents */
+	if (ISCHILD(fs)) fs = PARENTFS(fs);
+#endif
 
+	if (sector != fs->winsect) {	/* Window offset changed? */
+#if !FF_FS_READONLY
+		res = sync_window(fs);		/* Write-back changes */
+#endif
+		if (res == FR_OK) {			/* Fill sector window with new data */
+			if (disk_read_readdir(fs->pdrv, fs->win, sector, 1) != RES_OK) {
+				sector = 0xFFFFFFFF;	/* Invalidate window if read data is not valid */
+				res = FR_DISK_ERR;
+			}
+			fs->winsect = sector;
+		}
+	}
+	return res;
+}
+#endif
 
 #if !FF_FS_READONLY
 /*-----------------------------------------------------------------------*/
@@ -1827,6 +1853,61 @@ FRESULT dir_read (
 
 #endif	/* FF_FS_MINIMIZE <= 1 || FF_USE_LABEL || FF_FS_RPATH >= 2 */
 
+#ifndef __LITEOS_M__
+FRESULT dir_read_massive (
+	DIR* dp,		/* Pointer to the directory object */
+	int vol			/* Filtered by 0:file/directory or 1:volume label */
+)
+{
+	FRESULT res = FR_NO_FILE;
+	FATFS *fs = dp->obj.fs;
+	BYTE attr, b;
+#if FF_USE_LFN
+	BYTE ord = 0xFF, sum = 0xFF;
+#endif
+
+	while (dp->sect) {
+		res = move_window_readdir(fs, dp->sect);
+		if (res != FR_OK) break;
+		b = dp->dir[DIR_Name];	/* Test for the entry type */
+		if (b == 0) {
+			res = FR_NO_FILE; break; /* Reached to end of the directory */
+		}
+
+		/* On the FAT/FAT32 volume */
+		dp->obj.attr = attr = dp->dir[DIR_Attr] & AM_MASK;	/* Get attribute */
+#if FF_USE_LFN		/* LFN configuration */
+		if (b == DDEM || b == '.' || (int)((attr & ~AM_ARC) == AM_VOL) != vol) {	/* An entry without valid data */
+			ord = 0xFF;
+		} else {
+			if (attr == AM_LFN) {			/* An LFN entry is found */
+				if (b & LLEF) {			/* Is it start of an LFN sequence? */
+					sum = dp->dir[LDIR_Chksum];
+					b &= (BYTE)~LLEF; ord = b;
+					dp->blk_ofs = dp->dptr;
+				}
+				/* Check LFN validity and capture it */
+				ord = (b == ord && sum == dp->dir[LDIR_Chksum] && pick_lfn(fs->lfnbuf, dp->dir)) ? ord - 1 : 0xFF;
+			} else {					/* An SFN entry is found */
+				if (ord != 0 || sum != sum_sfn(dp->dir)) {	/* Is there a valid LFN? */
+					dp->blk_ofs = 0xFFFFFFFF;			/* It has no LFN. */
+				}
+				break;
+			}
+		}
+#else	/* Non LFN configuration */
+		if (b != DDEM && b != '.' && attr != AM_LFN && (int)((attr & ~AM_ARC) == AM_VOL) == vol) {	/* Is it a valid entry? */
+			break;
+		}
+#endif
+		res = dir_next(dp, 0);		/* Next entry */
+		if (res != FR_OK) break;
+	}
+
+	if (res != FR_OK) dp->sect = 0;		/* Terminate the read operation on error or EOT */
+	return res;
+}
+#endif
 
 
 /*-----------------------------------------------------------------------*/
@@ -5982,6 +6063,7 @@ FRESULT _mkfs(los_part *partition, int sector, int opt, BYTE *work, UINT len)
 	}
 
 	/* Initialize FAT area */
+	los_disk_cache_clear(pdrv);
 	mem_set(buf, 0, (UINT)szb_buf);
 	sect = b_fat; /* FAT start sector */
 	for (i = 0; i < n_fats; i++) { /* Initialize FATs each */

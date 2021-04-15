@@ -88,7 +88,7 @@ DRESULT disk_read (
 #ifndef __LITEOS_M__
 	int result;
 
-	result = los_part_read((int)pdrv, (void *)buff, sector, (UINT32)count);
+	result = los_part_read((int)pdrv, (void *)buff, sector, (UINT32)count, TRUE);
 
 	if (result == 0)
 		return RES_OK;
@@ -103,11 +103,31 @@ DRESULT disk_read (
 }
 
 #ifndef __LITEOS_M__
+DRESULT disk_read_readdir (
+	BYTE pdrv,		/* Physical drive nmuber to identify the drive */
+	BYTE *buff,		/* Data buffer to store read data */
+	QWORD sector,		/* Start sector in LBA */
+	UINT count		/* Number of sectors to read */
+)
+{
+	int result;
+
+	result = los_part_read((int)pdrv, (void *)buff, sector, (UINT32)count, FALSE);
+
+	if (result == 0)
+		return RES_OK;
+	else
+		return RES_ERROR;
+}
+#endif
+
+
+#ifndef __LITEOS_M__
 DRESULT disk_raw_read (int id, void *buff, QWORD sector, UINT32 count)
 {
 	int result;
 
-	result = los_disk_read(id, buff, sector, count);
+	result = los_disk_read(id, buff, sector, count, TRUE);
 
 	if (result == 0)
 		return RES_OK;

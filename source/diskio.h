@@ -38,6 +38,7 @@ DSTATUS disk_status (BYTE pdrv);
 DRESULT disk_read (BYTE pdrv, BYTE* buff, QWORD sector, UINT count);
 DRESULT disk_write (BYTE pdrv, const BYTE* buff, QWORD sector, UINT count);
 #ifndef __LITEOS_M__
+DRESULT disk_read_readdir (BYTE pdrv, BYTE* buff, QWORD sector, UINT count);
 DRESULT disk_raw_read (int id, void* buff, QWORD sector, UINT32 count);
 DRESULT disk_raw_write (int id, void* buff, QWORD sector, UINT32 count);
 #endif

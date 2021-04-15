@@ -470,6 +470,9 @@ void unlock_fs (FATFS *fs, FRESULT res);
 FRESULT dir_sdi (DIR *dp, DWORD ofs);
 FRESULT dir_find(DIR *dp);
 FRESULT dir_read(DIR *dp, int vol);
+#ifndef __LITEOS_M__
+FRESULT dir_read_massive(DIR *dp, int vol);
+#endif
 FRESULT dir_remove(DIR *dp);
 FRESULT dir_next(DIR *dp, int stretch);
 FRESULT dir_register(DIR *dp);
