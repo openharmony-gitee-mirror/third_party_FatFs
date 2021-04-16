@@ -475,6 +475,7 @@ FRESULT dir_read_massive(DIR *dp, int vol);
 #endif
 FRESULT dir_remove(DIR *dp);
 FRESULT dir_next(DIR *dp, int stretch);
+DWORD dir_ofs(DIR* dp);
 FRESULT dir_register(DIR *dp);
 DWORD create_chain (FFOBJID* obj, DWORD clst);
 FRESULT remove_chain (FFOBJID* obj, DWORD clst, DWORD pclst);
