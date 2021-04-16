@@ -1978,7 +1978,7 @@ DWORD dir_ofs (
 )
 {
 #if FF_USE_LFN
-	UINT len, nent;
+	UINT nlen, nent;
 	DWORD entry;
 	for (nlen = 0; fs->lfnbuf[nlen]; nlen++) ;	/* Get lfn length */
 	nent = (dp->fn[NSFLAG] & NS_LFN) ? (nlen + 12) / 13 + 1 : 1;	/* Number of entries of the lfn */
