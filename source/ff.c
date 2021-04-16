@@ -1969,6 +1969,25 @@ FRESULT dir_find (	/* FR_OK(0):succeeded, !=0:error */
 }
 
 
+/*-----------------------------------------------------------------------*/
+/* Directory handling - Calculate the LFN entry of the directory         */
+/*-----------------------------------------------------------------------*/
+
+DWORD dir_ofs (
+	DIR* dp
+)
+{
+#if FF_USE_LFN
+	UINT nlen, nent;
+	DWORD entry;
+	for (nlen = 0; dp->obj.fs->lfnbuf[nlen]; nlen++) ;	/* Get lfn length */
+	nent = (dp->fn[NSFLAG] & NS_LFN) ? (nlen + 12) / 13 + 1 : 1;	/* Number of entries of the lfn */
+	entry = dp->dptr - (nent - 1) * SZDIRE;
+	return entry;
+#else
+	return dp->dptr;
+#endif
+}
 
 
 #if !FF_FS_READONLY
