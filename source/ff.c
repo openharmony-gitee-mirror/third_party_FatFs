@@ -6089,7 +6089,7 @@ FRESULT _mkfs(los_part *partition, int sector, int opt, BYTE *work, UINT len)
 		if (fmt == FS_FAT32) {
 			st_dword(buf + 0, 0xFFFFFFF8); /* Entry 0 */
 			st_dword(buf + 4, DISK_ERROR); /* Entry 1 */
-			st_dword(buf + 8, FAT32_END_OF_FILE); /* Entry 2 (root directory) */
+			st_dword(buf + 8, FAT32_END_OF_CLUSTER); /* Entry 2 (root directory) */
 		} else {
 			st_dword(buf + 0, (fmt == FS_FAT12) ? 0xFFFFF8 : 0xFFFFFFF8); /* Entry 0 and 1 */
 		}
