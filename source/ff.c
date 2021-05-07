@@ -4290,6 +4290,51 @@ FRESULT f_stat (
 }
 
 
+FRESULT fat_count_free_entries(
+	DWORD *nclst,	/* Pointer to a variable to return number of free clusters */
+	FATFS *fs	/* Pointer to corresponding filesystem object */
+)
+{
+	DWORD nfree, clst, stat;
+	QWORD sect;
+	UINT i;
+	FFOBJID obj;
+	FRESULT res = FR_OK;
+
+	nfree = 0;
+	if (fs->fs_type == FS_FAT12) {	/* FAT12: Scan bit field FAT entries */
+		clst = 2; obj.fs = fs;
+		do {
+			stat = get_fat(&obj, clst);
+			if (stat == 0xFFFFFFFF) { res = FR_DISK_ERR; break; }
+			if (stat == 1) { res = FR_INT_ERR; break; }
+			if (stat == 0) nfree++;
+		} while (++clst < fs->n_fatent);
+	} else {
+		/* FAT16/32: Scan WORD/DWORD FAT entries */
+		clst = fs->n_fatent;	/* Number of entries */
+		sect = fs->fatbase;		/* Top of the FAT */
+		i = 0;					/* Offset in the sector */
+		do {	/* Counts numbuer of entries with zero in the FAT */
+			if (i == 0) {
+				res = move_window(fs, sect++);
+				if (res != FR_OK) break;
+			}
+			if (fs->fs_type == FS_FAT16) {
+				if (ld_word(fs->win + i) == 0) nfree++;
+				i += 2;
+			} else {
+				if ((ld_dword(fs->win + i) & 0x0FFFFFFF) == 0) nfree++;
+				i += 4;
+			}
+			i %= SS(fs);
+		} while (--clst);
+	}
+	*nclst = nfree;		/* Return the free clusters */
+	fs->free_clst = nfree;	/* Now free_clst is valid */
+	fs->fsi_flag |= 1;	/* FAT32: FSInfo is to be updated */
+	return res;
+}
 
 #if !FF_FS_READONLY
 /*-----------------------------------------------------------------------*/
@@ -4304,11 +4349,6 @@ FRESULT f_getfree (
 {
 	FRESULT res;
 	FATFS *fs;
-	DWORD nfree, clst, stat;
-	QWORD sect;
-	UINT i;
-	FFOBJID obj;
-
 
 	/* Get logical drive */
 	res = find_volume(&path, &fs, 0);
@@ -4319,38 +4359,7 @@ FRESULT f_getfree (
 			*nclst = fs->free_clst;
 		} else {
 			/* Scan FAT to obtain number of free clusters */
-			nfree = 0;
-			if (fs->fs_type == FS_FAT12) {	/* FAT12: Scan bit field FAT entries */
-				clst = 2; obj.fs = fs;
-				do {
-					stat = get_fat(&obj, clst);
-					if (stat == 0xFFFFFFFF) { res = FR_DISK_ERR; break; }
-					if (stat == 1) { res = FR_INT_ERR; break; }
-					if (stat == 0) nfree++;
-				} while (++clst < fs->n_fatent);
-			} else {
-				/* FAT16/32: Scan WORD/DWORD FAT entries */
-				clst = fs->n_fatent;	/* Number of entries */
-				sect = fs->fatbase;		/* Top of the FAT */
-				i = 0;					/* Offset in the sector */
-				do {	/* Counts numbuer of entries with zero in the FAT */
-					if (i == 0) {
-						res = move_window(fs, sect++);
-						if (res != FR_OK) break;
-					}
-					if (fs->fs_type == FS_FAT16) {
-						if (ld_word(fs->win + i) == 0) nfree++;
-						i += 2;
-					} else {
-						if ((ld_dword(fs->win + i) & 0x0FFFFFFF) == 0) nfree++;
-						i += 4;
-					}
-					i %= SS(fs);
-				} while (--clst);
-			}
-			*nclst = nfree;			/* Return the free clusters */
-			fs->free_clst = nfree;	/* Now free_clst is valid */
-			fs->fsi_flag |= 1;		/* FAT32: FSInfo is to be updated */
+			res = fat_count_free_entries(nclst, fs);
 		}
 	}
 
