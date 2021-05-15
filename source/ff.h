@@ -450,7 +450,8 @@ FRESULT f_getclustinfo (FIL* fp, DWORD* fclust, DWORD* fcount);	/* get the clust
 FRESULT f_checkopenlock(int index);
 FRESULT sync_fs (FATFS* fs);
 FRESULT sync_window(FATFS *fs);
-FRESULT move_window ( FATFS* fs, QWORD	sector);
+FRESULT move_window (FATFS* fs, QWORD sector);
+FRESULT fat_count_free_entries(DWORD *nclst, FATFS *fs);
 void get_fileinfo (DIR* dp, FILINFO* fno);
 DWORD get_fat (FFOBJID *obj, DWORD clst);
 FRESULT put_fat(FATFS *fs, DWORD clst, DWORD val);
