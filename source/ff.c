@@ -3592,7 +3592,10 @@ FRESULT f_write (
 						clst = create_chain(&fp->obj, fp->clust);	/* Follow or stretch cluster chain on the FAT */
 					}
 				}
-				if (clst == 0) break;		/* Could not allocate a new cluster (disk full) */
+				if (clst == 0) { 		/* Could not allocate a new cluster (disk full) */
+					res = FR_NO_SPACE_LEFT;
+					break;
+				}
 				if (clst == 1) ABORT(fs, FR_INT_ERR);
 				if (clst == 0xFFFFFFFF) ABORT(fs, FR_DISK_ERR);
 				fp->clust = clst;			/* Update current cluster */
@@ -3673,7 +3676,7 @@ FRESULT f_write (
 
 	fp->flag |= FA_MODIFIED;				/* Set file change flag */
 
-	LEAVE_FF(fs, FR_OK);
+	LEAVE_FF(fs, res);
 }
 
 /*-----------------------------------------------------------------------*/
@@ -4026,6 +4029,7 @@ FRESULT f_lseek (
 #if !FF_FS_READONLY
 				if (clst == 0) {						/* If no cluster chain, create a new chain */
 					clst = create_chain(&fp->obj, 0);
+					if (clst == 0) res = FR_NO_SPACE_LEFT;
 					if (clst == 1) ABORT(fs, FR_INT_ERR);
 					if (clst == 0xFFFFFFFF) ABORT(fs, FR_DISK_ERR);
 					fp->obj.sclust = clst;
@@ -4040,7 +4044,9 @@ FRESULT f_lseek (
 					if (fp->flag & FA_WRITE) {			/* Check if in write mode or not */
 						clst = create_chain(&fp->obj, clst);	/* Follow chain with forceed stretch */
 						if (clst == 0) {				/* Clip file size in case of disk full */
-							ofs = 0; break;
+							ofs = 0;
+							res = FR_NO_SPACE_LEFT;
+							break;
 						}
 					} else
 #endif
