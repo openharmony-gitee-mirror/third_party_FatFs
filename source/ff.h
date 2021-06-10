@@ -568,6 +568,7 @@ int ff_del_syncobj (FF_SYNC_t* sobj);	/* Delete a sync object */
 #define	AM_SYS	0x04	/* System */
 #define AM_DIR	0x10	/* Directory */
 #define AM_ARC	0x20	/* Archive */
+#define AM_LNK	0x80	/* Symbol link */
 
 #ifdef LOSCFG_FS_FAT_VIRTUAL_PARTITION
 #define FS_PARENT	0x00
