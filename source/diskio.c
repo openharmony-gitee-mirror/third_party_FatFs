@@ -8,7 +8,6 @@
 /*-----------------------------------------------------------------------*/
 #include "diskio.h"
 #ifndef __LITEOS_M__
-#include "fs/fs.h"
 #include "string.h"
 #include "disk.h"
 #else

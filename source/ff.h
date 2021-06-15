@@ -24,10 +24,12 @@
 extern "C" {
 #endif
 
+#include <dirent.h>
+#include <sys/types.h>
 #include "integer.h"	/* Basic integer types */
 #include "ffconf.h"		/* FatFs configuration options */
 #ifdef LOSCFG_FS_FAT_VIRTUAL_PARTITION
-#include "fs/fs.h"
+#include "virpart.h"
 #endif
 #ifndef __LITEOS_M__
 #include "los_list.h"
@@ -35,7 +37,6 @@ extern "C" {
 #if FF_DEFINED != FFCONF_DEF
 #error Wrong configuration file (ffconf.h).
 #endif
-#include "dirent.h"
 
 /*--------------------------------*/
 /* LFN/Directory working buffer   */
