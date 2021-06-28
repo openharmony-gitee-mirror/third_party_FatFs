@@ -5095,13 +5095,10 @@ FRESULT f_getlabel (
 /* Set Volume Label                                                      */
 /*-----------------------------------------------------------------------*/
 
-FRESULT f_setlabel (
-	const TCHAR* label	/* Volume label to set with heading logical drive number */
-)
+FRESULT set_volumn_label(FATFS *fs, const TCHAR *label)
 {
 	FRESULT res;
 	DIR dj;
-	FATFS *fs;
 	BYTE dirvn[22];
 	UINT di;
 	WCHAR wc;
@@ -5109,13 +5106,7 @@ FRESULT f_setlabel (
 #if FF_USE_LFN
 	DWORD dc;
 #endif
-
-	/* Get logical drive */
-	res = find_volume(&label, &fs, FA_WRITE);
-	if (res != FR_OK) LEAVE_FF(fs, res);
-
-
-	/* On the FAT/FAT32 volume */
+		/* On the FAT/FAT32 volume */
 	mem_set(dirvn, ' ', 11);
 	di = 0;
 	while ((UINT)*label >= ' ') {	/* Create volume label */
@@ -5170,6 +5161,22 @@ FRESULT f_setlabel (
 			}
 		}
 	}
+
+	return res;
+}
+
+FRESULT f_setlabel (
+	const TCHAR* label	/* Volume label to set with heading logical drive number */
+)
+{
+	FRESULT res;
+	FATFS *fs;
+
+	/* Get logical drive */
+	res = find_volume(&label, &fs, FA_WRITE);
+	if (res != FR_OK) LEAVE_FF(fs, res);
+
+	res = set_volumn_label(fs, label);
 
 	LEAVE_FF(fs, res);
 }
