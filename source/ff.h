@@ -484,6 +484,7 @@ FRESULT remove_chain (FFOBJID* obj, DWORD clst, DWORD pclst);
 void mem_set (void* dst, int val, UINT cnt);
 void mem_cpy (void* dst, const void* src, UINT cnt);
 int fatfs_get_vol (FATFS *fat);
+FRESULT set_volumn_label(FATFS *fs, const TCHAR *label);
 
 #define f_eof(fp) ((int)((fp)->fptr == (fp)->obj.objsize))
 #define f_error(fp) ((fp)->err)
