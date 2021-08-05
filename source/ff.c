@@ -1662,7 +1662,7 @@ static int pick_lfn (	/* 1:succeeded, 0:buffer overflow or invalid LFN entry */
 	}
 
 	if (dir[LDIR_Ord] & LLEF) {				/* Put terminator if it is the last LFN part */
-		if (i >= FF_MAX_LFN) return 0;		/* Buffer overflow? */
+		if (i > FF_MAX_LFN) return 0;		/* Buffer overflow? */
 		lfnbuf[i] = 0;
 	}
 
