@@ -256,9 +256,9 @@ typedef struct {
 	VOID**	child_fs;		/* Point to the child Fatfs object ,only available in reality Fatfs object */
 #endif
 #ifndef __LITEOS_M__
-	int fs_uid;
-	int fs_gid;
-	mode_t fs_mode;
+	int 	fs_uid;
+	int 	fs_gid;
+	mode_t 	fs_mode;
 #endif
 	unsigned short fs_dmask;
 	unsigned short fs_fmask;
@@ -347,9 +347,19 @@ typedef struct {
 #endif
 } FILINFO;
 
+#ifndef __LITEOS_M__
 typedef struct {
-	DIR		f_dir;
+	DWORD	clst;
+	FSIZE_t	pos;
+} FAT_ENTRY;
+#endif
+
+typedef struct {
+	DIR	f_dir;
 	FILINFO	fno;
+#ifndef __LITEOS_M__
+	FAT_ENTRY	fat_entry;
+#endif
 } DIR_FILE;
 
 #define MAX(a, b, c)	(c = (a > b) ? a : b)
