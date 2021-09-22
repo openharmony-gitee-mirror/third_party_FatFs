@@ -2893,6 +2893,24 @@ static FRESULT validate (	/* Returns FR_OK or FR_INVALID_OBJECT */
 	return res;
 }
 
+#define FAT12_END_OF_CLUSTER 0x00000FFF
+#define FAT16_END_OF_CLUSTER 0x0000FFFF
+#define FAT32_END_OF_CLUSTER 0x0FFFFFFF
+#define DISK_ERROR  0xFFFFFFFF
+
+static DWORD get_end_of_cluster(FATFS *fs)
+{
+    switch (fs->fs_type) {
+        case FS_FAT12:
+            return FAT12_END_OF_CLUSTER;
+        case FS_FAT16:
+            return FAT16_END_OF_CLUSTER;
+        case FS_FAT32:
+            return FAT32_END_OF_CLUSTER;
+        default:
+            return DISK_ERROR;
+    }
+}
 
 static
 UINT get_clustinfo(FIL* fp,
@@ -2901,6 +2919,7 @@ UINT get_clustinfo(FIL* fp,
 {
 	UINT count = 0;
 	DWORD fsclust = 0, val;
+        DWORD last_clust = get_end_of_cluster(fp->obj.fs);
 
 	if (fp->obj.sclust != 0) {
 		val = fp->obj.sclust;
@@ -2908,7 +2927,7 @@ UINT get_clustinfo(FIL* fp,
 			fsclust = val;
 			val = get_fat(&fp->obj, fsclust);
 			count++;
-		} while ((val != 0x0FFFFFFF) && (val != 1));
+		} while ((val != last_clust) && (val != 1));
 	}
 	*fclust = fsclust;
 	return count;
@@ -3189,13 +3208,14 @@ FRESULT f_open (
 		if (res == FR_OK && (mode & ~FA_READ) && ISVIRPART(fs) &&
 		    (ISCHILD(fs) || (ISPARENT(fs) && fs->st_clst != 0xFFFFFFFF && fs->ct_clst != 0xFFFFFFFF))) {
 			clst = fp->obj.sclust;
+                        cl = get_end_of_cluster(fs);
 			if (clst != 0) {
 				while (1) {
 					if (clst == 0xFFFFFFFF) {
 						res = FR_DISK_ERR;
 						break;
 					}
-					if (clst == 0x0FFFFFFF) {
+					if (clst == cl) { /* ls the end of the cluster? */
 						res = FR_OK;
 						break;
 					}
@@ -3400,7 +3420,10 @@ FRESULT f_write (
 						clst = create_chain(&fp->obj, fp->clust);	/* Follow or stretch cluster chain on the FAT */
 					}
 				}
-				if (clst == 0) break;		/* Could not allocate a new cluster (disk full) */
+                                if (clst == 0) { /* Could not allocate a new cluster (disk full) */
+                                    res = FR_NO_SPACE_LEFT;
+                                    break;
+                                }
 				if (clst == 1) ABORT(fs, FR_INT_ERR);
 				if (clst == 0xFFFFFFFF) ABORT(fs, FR_DISK_ERR);
 				fp->clust = clst;			/* Update current cluster */
@@ -3481,7 +3504,7 @@ FRESULT f_write (
 
 	fp->flag |= FA_MODIFIED;				/* Set file change flag */
 
-	LEAVE_FF(fs, FR_OK);
+	LEAVE_FF(fs, res);
 }
 
 /*-----------------------------------------------------------------------*/
@@ -3848,7 +3871,9 @@ FRESULT f_lseek (
 					if (fp->flag & FA_WRITE) {			/* Check if in write mode or not */
 						clst = create_chain(&fp->obj, clst);	/* Follow chain with forceed stretch */
 						if (clst == 0) {				/* Clip file size in case of disk full */
-							ofs = 0; break;
+                                                    ofs = 0;
+                                                    res = FR_NO_SPACE_LEFT;
+                                                    break;
 						}
 					} else
 #endif
@@ -4198,7 +4223,7 @@ FRESULT f_truncate (
 {
 	FRESULT res;
 	FATFS *fs;
-	DWORD n, tcl, val, count, fclust = 0;
+        DWORD n, tcl, val, count, fclust = 0, last_clust;
 
 	res = validate(&fp->obj, &fs);	/* Check validity of the file object */
 	if (res != FR_OK || (res = (FRESULT)fp->err) != FR_OK) LEAVE_FF(fs, res);
@@ -4212,6 +4237,7 @@ FRESULT f_truncate (
 			n = (DWORD)fs->csize * SS(fs);	/* Cluster size */
 			tcl = (DWORD)(length / n) + ((length & (n - 1)) ? 1 : 0);	/* Number of clusters required */
 			val = fp->obj.sclust;
+                        last_clust = get_end_of_cluster(fs);
 			count = 0;
 			do {
 				fclust = val;
@@ -4219,7 +4245,7 @@ FRESULT f_truncate (
 				count ++;
 				if (count == tcl)
 					break;
-			} while ((val != 0x0FFFFFFF) && (val != 1) && (val != 0xFFFFFFFF));
+			} while ((val != last_clust) && (val != 1) && (val != 0xFFFFFFFF));
 
 			res = FR_OK;
 			if (val == 0xFFFFFFFF) res = FR_DISK_ERR;
@@ -4273,6 +4299,7 @@ FRESULT f_unlink (
 	FRESULT res;
 	DIR dj, sdj;
 	DWORD dclst = 0;
+        DWORD last_clust = 1;
 	FATFS *fs;
 #if FF_FS_REENTRANT
 	FATFS *fs_bak;
@@ -4318,6 +4345,7 @@ FRESULT f_unlink (
 		if (res == FR_OK && ISVIRPART(fs)) {
 			dj.atrootdir = 0;rtclst = 2;
 			st_bak = PARENTFS(dj.obj.fs)->winsect;
+                        last_clust = get_end_of_cluster(fs);
 			/* Follow the root directory cluster chain */
 			for (;;) {
 #if FF_FS_REENTRANT
@@ -4325,7 +4353,7 @@ FRESULT f_unlink (
 #else
 				if (rtclst == 0xFFFFFFFF) LEAVE_FF(fs,FR_DISK_ERR);
 #endif
-				if (rtclst == 0x0FFFFFFF) break;
+				if (rtclst == last_clust) break;
 #if FF_FS_REENTRANT
 				if (rtclst < 2 || rtclst >= fs->n_fatent) LEAVE_FF(fs_bak,FR_INT_ERR);
 				if (rtclst == 0 || rtclst == 1) LEAVE_FF(fs_bak,FR_INT_ERR);
@@ -4563,6 +4591,7 @@ FRESULT f_rename (
 #ifdef LOSCFG_FS_FAT_VIRTUAL_PARTITION
 	DWORD rtclst = 0;
 	DWORD st_bak = 0;
+        DWORD last_clust = 0;
 #endif
 
 	DEF_NAMBUF
@@ -4600,16 +4629,17 @@ FRESULT f_rename (
 		if (res == FR_OK && ISVIRPART(fs)) {
 			djo.atrootdir = 0;rtclst = 2;
 			st_bak = PARENTFS(djo.obj.fs)->winsect;
+                        last_clust = get_end_of_cluster(fs);
 			/* Follow the root directory cluster chain */
 			for (;;) {
 #if FF_FS_REENTRANT
 				if (rtclst == 0xFFFFFFFF) LEAVE_FF(fs_bak,FR_DISK_ERR);
-				if (rtclst == 0x0FFFFFFF) break;
+				if (rtclst == last_clust) break;
 				if (rtclst < 2 || rtclst >= fs->n_fatent) LEAVE_FF(fs_bak,FR_INT_ERR);
 				if (rtclst == 0 || rtclst == 1) LEAVE_FF(fs_bak,FR_INT_ERR);
 #else
 				if (rtclst == 0xFFFFFFFF) LEAVE_FF(fs,FR_DISK_ERR);
-				if (rtclst == 0x0FFFFFFF) break;
+				if (rtclst == last_clust) break;
 				if (rtclst < 2 || rtclst >= fs->n_fatent) LEAVE_FF(fs,FR_INT_ERR);
 				if (rtclst == 0 || rtclst == 1) LEAVE_FF(fs,FR_INT_ERR);
 #endif
@@ -5111,13 +5141,14 @@ FRESULT f_expand (
 #endif
 	} else {	/* Reached error, remove the chain which built before */
 		clst = scl;
+                lclst = get_end_of_cluster(fs); /* Get the end of cluster chain */
 		for (;;) {
 			n = get_fat(&fp->obj, clst);
 			if (n == 1 || n == 0) { res = FR_INT_ERR; break; }
 			if (n == 0xFFFFFFFF) { res = FR_DISK_ERR; break; }
 			res = put_fat(fs, clst, 0);
 			if (res != FR_OK) break;
-			if (n == 0x0FFFFFFF) break;	/* If the current cluster is the last cluster ,the finish this operation */
+			if (n == lclst) break;	/* If the current cluster is the last cluster ,the finish this operation */
 			clst = n;
 		}
 		res = put_fat(fs, fclust, 0xFFFFFFFF);
@@ -6187,7 +6218,7 @@ FRESULT f_fcheckfat(DIR_FILE* dir_info)
 				res = FR_INT_ERR;
 				LEAVE_FF(fs, res);
 			}
-			if (val == 0x0FFFFFFF) {
+			if (val == get_end_of_cluster(fs)) {
 				res = FR_OK;
 				LEAVE_FF(fs, res);
 			}
