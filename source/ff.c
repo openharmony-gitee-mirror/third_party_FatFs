@@ -3424,6 +3424,9 @@ FRESULT f_open (
 			fp->buf = (BYTE*) ff_memalloc(SS(fs));	/* Init sector buffer */
 			if (fp->buf == NULL) {
 				res = FR_NOT_ENOUGH_CORE;
+#if FF_FS_LOCK != 0
+				dec_lock(fp->obj.lockid);
+#endif
 #if FF_FS_REENTRANT
 				LEAVE_FF(fs_bak, res);
 #else
@@ -3484,11 +3487,11 @@ FRESULT f_open (
 					clst = get_fat(&fp->obj, clst);
 				}
 			}
-
-			if (res != FR_OK) {
-				/* If the chain is occupied, Recycle the file lock ,pass out an error*/
-				dec_lock(fp->obj.lockid);
-			}
+		}
+#endif
+#if FF_FS_LOCK != 0
+		if (res != FR_OK) {
+			dec_lock(fp->obj.lockid); /* Ivalid lockid will be ignored */
 		}
 #endif
 		FREE_NAMBUF();
@@ -5597,7 +5600,7 @@ FRESULT f_mkfs (
 	UINT n_fat, n_root, i;					/* Index, Number of FATs and Number of roor dir entries */
 	int vol;
 	DSTATUS ds;
-	FRESULT fr;
+	FRESULT fr = FR_OK;
 #if FF_MULTI_PARTITION
 	int extended_br;
 	int extended_pos = -1;
@@ -6362,6 +6365,7 @@ FRESULT f_fdisk (
 
 	while (szt[i] != 0 && i < 4) {
 		ptbl[i] = szt[i];
+		i++;
 	}
 
 	LEAVE_MKFS(create_partition(pdrv, ptbl, 0x07, buf));
